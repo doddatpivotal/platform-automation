@@ -1,0 +1,9 @@
+opsman_version: ^2\.3\.[0-9]+$
+pcf_automation_version: ^1\.0\..*$
+healthwatch_version: ^1\.4\.[0-9]+$
+pas_version: ^2\.3\.[0-9]+$
+pks_version: ^1\.2\.[0-9]+$
+opsman_image_s3_versioned_regexp: pcf-vsphere-(.*).ova
+opsman_image_wildcard: pcf-vsphere-*.ova
+stemcell_filename_regex: bosh-stemcell-(.*)-ubuntu-xenial-go_agent.tgz
+stemcell_version: ^97.[0-9]+$

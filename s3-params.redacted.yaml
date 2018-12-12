@@ -1,0 +1,10 @@
+s3:
+  access_key_id: REDACTED_PASSWORD
+  secret_access_key: REDACTED_PASSWORD
+  region_name: us-east-2
+  buckets: 
+    pcf_automation: winterfell-live-platform-automation-for-pcf
+    product: winterfell-live-platform-automation-product
+    stemcell: winterfell-live-platform-automation-stemcell
+    installation: winterfell-live-platform-automation-installation
+    pcf_automation_output: winterfell-live-platform-automation-output

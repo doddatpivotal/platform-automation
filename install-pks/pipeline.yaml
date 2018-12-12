@@ -1,0 +1,301 @@
+resource_types:
+- name: pivnet
+  type: docker-image
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+
+resources:
+- name: pcf-automation-tasks
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: .*tasks-(.*).zip
+
+- name: pcf-automation-image
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: .*image-(.*).tgz
+
+- name: stemcell
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: stemcells-ubuntu-xenial
+    product_version: ((stemcell_version))
+    sort_by: semver    
+
+# - name: pks-product
+#   type: s3
+#   source:
+#     access_key_id: ((s3.access_key_id))
+#     bucket: ((s3.buckets.product))
+#     regexp: pks-(.*).pivotal # Modified this to indicate small footprint
+#     region_name: ((s3.region_name))
+#     secret_access_key: ((s3.secret_access_key))
+
+- name: pcf-automation-output-pks-config
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation_output))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    versioned_file: pivotal-container-service.yml
+
+# configurations
+
+- name: configuration
+  type: git
+  source:
+    private_key: ((configuration.private_key))
+    uri: ((configuration.uri))
+    branch: master
+
+- name: variable
+  type: git
+  source:
+    private_key: ((variable.private_key))
+    uri: ((variable.uri))
+    branch: master
+
+- name: pks-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: pivotal-container-service
+    product_version: ((pks_version))
+    sort_by: semver
+
+# triggers used to have jobs do something in a timely manner
+
+- name: one-time-trigger
+  type: time
+  source:
+    interval: 999999h
+
+jobs:
+
+- name: upload-and-stage-pks
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: one-time-trigger
+      trigger: true
+    - get: pks-product
+    - get: configuration
+    - get: variable
+  - task: upload-product
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/upload-product.yml
+    input_mapping:
+      product: pks-product
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+  - task: stage-product
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/stage-product.yml
+    input_mapping:
+      product: pks-product
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+
+- name: upload-stemcell
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+      passed:
+      - upload-and-stage-pks
+      trigger: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: stemcell
+      trigger: true
+      params:
+        globs:
+        - bosh-stemcell-*vsphere-*
+    - get: configuration
+    - get: variable
+  - task: upload-stemcell
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/upload-stemcell.yml
+    input_mapping:
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+
+- name: configure-pks
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+      passed:
+      - upload-stemcell
+      trigger: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: configuration
+    - get: variable
+  - task: configure-pks
+    image: pcf-automation-image
+    # file: pcf-automation-tasks/tasks/configure-product.yml
+    # input_mapping:
+    #   config: configuration
+    #   env: configuration
+    #   vars: variable
+    # params:
+    #   CONFIG_FILE: ((foundation))/config/cf.yml
+    #   VARS_FILES: vars/((foundation))/vars/cf-vars.yml
+    #   ENV_FILE: ((foundation))/env/env.yml
+    config:
+      platform: linux
+      inputs:
+        - name: configuration
+        - name: variable
+      params:
+        CONFIG_FILE: ((foundation))/config/pivotal-container-service.yml
+        VARS_FILES: variable/((foundation))/vars/pivotal-container-service-vars.yml
+        ENV_FILE: ((foundation))/env/env.yml
+        CORE_DOMAIN: ((core_domain))
+      run:
+        path: bash
+        args:
+          - -c
+          - |
+            p-automator -v
+            set -eux
+
+            curl -L -o jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+            chmod +x jq
+
+            vars_files_args=("")
+            for vf in ${VARS_FILES}
+            do
+              vars_files_args+=("--vars-file ${vf}")
+            done
+            {
+              DOMAINS="*.pks.$CORE_DOMAIN,*.api.pks.$CORE_DOMAIN"
+              CERTIFICATE=`om --env configuration/"${ENV_FILE}" generate-certificate -d $DOMAINS`
+              
+              export OM_VAR_pivotal_container_service_pks_tls_cert_pem=`echo $CERTIFICATE | ./jq ".certificate" -r`
+              export OM_VAR_pivotal_container_service_pks_tls_private_key_pem=`echo $CERTIFICATE | ./jq ".key" -r`
+
+            } 2> /dev/null
+
+            # ${vars_files_args[@] needs to be globbed in order to pass through properly
+            # shellcheck disable=SC2068
+            om --env configuration/"${ENV_FILE}" configure-product --vars-env OM_VAR \
+              --config "configuration/${CONFIG_FILE}" ${vars_files_args[@]}
+
+- name: apply-product-changes
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+      passed:
+      - configure-pks
+      trigger: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: configuration
+    - get: variable
+  - task: apply-product-changes
+    image: pcf-automation-image
+    config: 
+      platform: linux
+
+      inputs:
+      - name: configuration # contains the env file with target OpsMan Information
+
+      params:
+        PRODUCT_NAME: pivotal-container-service
+        ENV_FILE: ((foundation))/env/env.yml
+
+      run:
+        path: bash
+        args:
+        - "-c"
+        - |
+          p-automator -v
+          set -eux
+          om --env configuration/"${ENV_FILE}" apply-changes -n ${PRODUCT_NAME}
+
+- name: staged-pks-config
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: configuration
+    - get: variable
+  - task: staged-config
+    image: pcf-automation-image
+    # file: pcf-automation-tasks/tasks/staged-config.yml
+    # input_mapping:
+    #   env: configuration
+    # params:
+    #   PRODUCT_NAME: cf
+    #   ENV_FILE: ((foundation))/env/env.yml
+    config:
+      platform: linux
+
+      inputs:
+      - name: configuration # contains the env file with target OpsMan Information
+
+      outputs:
+      - name: generated-config # will contain the staged product config
+
+      params:
+        PRODUCT_NAME: pivotal-container-service
+        ENV_FILE: ((foundation))/env/env.yml
+        SUBSTITUTE_CREDENTIALS_WITH_PLACEHOLDERS: true
+
+      run:
+        path: bash
+        args:
+        - "-c"
+        - |
+          p-automator -v
+          set -eux
+
+          flag=$(if "$SUBSTITUTE_CREDENTIALS_WITH_PLACEHOLDERS";
+                then echo '--include-placeholders';
+                else echo '--include-credentials';
+                fi
+                )
+
+          om --env configuration/"${ENV_FILE}" staged-config \
+            --product-name "$PRODUCT_NAME" \
+            "$flag" > generated-config/"$PRODUCT_NAME".yml
+  - put: pcf-automation-output-pks-config # DODD: added this to get it to compile
+    params:
+      file: generated-config/pivotal-container-service.yml
+

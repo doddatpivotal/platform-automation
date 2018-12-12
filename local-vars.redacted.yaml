@@ -1,0 +1,19 @@
+core_domain: "lab.winterfell.live"
+cloud_controller_system_domain: "sys.lab.winterfell.live"
+cloud_controller_apps_domain: "apps.lab.winterfell.live"
+foundation: lab
+opsman_image_s3_versioned_regexp: pcf-vsphere-(.*).ova
+extension-tasks:
+  uri: https://github.com/doddatpivotal/platform-automation-extensions.git #git@github.com:doddatpivotal/platform-automation-extensions.git
+configuration:
+  uri: git@github.com:doddatpivotal/winterfell-lab-platform-automation-config.git
+  private_key: |
+    -----BEGIN OPENSSH fake PRIVATE KEY-----
+    TEST REDACTED fake example
+    -----END OPENSSH PRIVATE KEY-----
+variable:
+  uri: git@github.com:doddatpivotal/winterfell-lab-platform-automation-variable.git
+  private_key: |
+    -----BEGIN OPENSSH fake PRIVATE KEY-----
+    TEST REDACTED fake example
+    -----END OPENSSH PRIVATE KEY-----

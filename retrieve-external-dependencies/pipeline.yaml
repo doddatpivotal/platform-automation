@@ -1,0 +1,184 @@
+resource_types:
+- name: pivnet
+  type: docker-image
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+
+resources:
+
+- name: platform-automation-pivnet
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: platform-automation
+    product_version: ((pcf_automation_version))
+    sort_by: semver
+
+- name: platform-automation-tasks-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: tasks-(.*).zip
+
+- name: platform-automation-image-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: image-(.*).tgz
+
+- name: pas-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: elastic-runtime
+    product_version: ((pas_version))
+    sort_by: semver
+
+- name: pas-product-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.product))
+    regexp: srt-(.*).pivotal
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    sort_by: semver
+
+- name: healthwatch-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: p-healthwatch
+    product_version: ((healthwatch_version))
+    sort_by: semver
+
+- name: healthwatch-product-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.product))
+    regexp: p-healthwatch-(.*).pivotal
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+
+- name: opsman-image
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: ops-manager
+    product_version: ((opsman_version))
+    sort_by: semver
+
+- name: opsman-image-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.product))
+    regexp: ((opsman_image_s3_versioned_regexp)) # vsphere ex: pcf-vsphere-(.*).ova
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+
+- name: stemcell
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: stemcells-ubuntu-xenial
+    product_version: ((stemcell_version))
+    sort_by: semver
+
+- name: stemcell-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.stemcell))
+    regexp: ((stemcell_filename_regex))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+
+- name: pks-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: pivotal-container-service
+    product_version: ((pks_version))
+    sort_by: semver
+
+- name: pks-product-s3
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.product))
+    regexp: pivotal-container-service-(.*).pivotal
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+
+jobs:
+- name: get-platform-automation
+  plan:
+  - get: platform-automation-pivnet
+    trigger: true
+  - aggregate:
+    - put: platform-automation-tasks-s3
+      params:
+        file: platform-automation-pivnet/*tasks-*.zip
+    - put: platform-automation-image-s3
+      params:
+        file: platform-automation-pivnet/*image-*.tgz
+
+- name: get-stemcell
+  plan:
+  - get: stemcell
+    trigger: true
+    params:
+      globs:
+      - bosh-stemcell-*vsphere-*
+  - put: stemcell-s3
+    params:
+      file: stemcell/bosh-stemcell-*
+
+- name: get-pas-product
+  plan:
+  - get: pas-product
+    params:
+      globs: ["srt*.pivotal"]
+    trigger: true
+  - put: pas-product-s3
+    params:
+      file: pas-product/srt-*.pivotal
+
+- name: get-healthwatch-product
+  plan:
+  - get: healthwatch-product
+    params:
+      globs: ["p-healthwatch*.pivotal"]
+    trigger: true
+  - put: healthwatch-product-s3
+    params:
+      file: healthwatch-product/p-healthwatch-*.pivotal
+
+- name: get-opsman-image
+  plan:
+  - get: opsman-image
+    params:
+      globs: ["*.ova", "*.yml"]
+    trigger: true
+  - put: opsman-image-s3
+    params:
+      file: opsman-image/((opsman_image_wildcard)) # vsphere ex: pcf-vsphere-*.ova
+
+- name: get-pks-product
+  plan:
+  - get: pks-product
+    params:
+      globs: ["pivotal-container-service*.pivotal"]
+    trigger: true
+  - put: pks-product-s3
+    params:
+      file: pks-product/pivotal-container-service-*.pivotal

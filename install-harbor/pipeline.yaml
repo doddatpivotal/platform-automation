@@ -1,0 +1,247 @@
+resource_types:
+- name: pivnet
+  type: docker-image
+  source:
+    repository: pivotalcf/pivnet-resource
+    tag: latest-final
+
+resources:
+- name: pcf-automation-tasks
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: .*tasks-(.*).zip
+
+- name: pcf-automation-image
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    regexp: .*image-(.*).tgz
+
+- name: pcf-automation-output-harbor-config
+  type: s3
+  source:
+    access_key_id: ((s3.access_key_id))
+    bucket: ((s3.buckets.pcf_automation_output))
+    region_name: ((s3.region_name))
+    secret_access_key: ((s3.secret_access_key))
+    versioned_file: harbor-container-registry.yml
+
+- name: pcf-automation-extension-tasks
+  type: git
+  source:
+    uri: ((extension-tasks.uri))
+    branch: master
+
+# configurations
+
+- name: configuration
+  type: git
+  source:
+    private_key: ((configuration.private_key))
+    uri: ((configuration.uri))
+    branch: master
+
+- name: variable
+  type: git
+  source:
+    private_key: ((variable.private_key))
+    uri: ((variable.uri))
+    branch: master
+
+- name: harbor-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: harbor-container-registry
+    product_version: ((harbor_version))
+    sort_by: semver
+
+# triggers used to have jobs do something in a timely manner
+
+- name: one-time-trigger
+  type: time
+  source:
+    interval: 999999h
+
+jobs:
+
+- name: upload-and-stage-harbor
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: one-time-trigger
+      trigger: true
+    - get: harbor-product
+    - get: configuration
+    - get: variable
+  - task: upload-product
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/upload-product.yml
+    input_mapping:
+      product: harbor-product
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+  - task: stage-product
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/stage-product.yml
+    input_mapping:
+      product: harbor-product
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+
+- name: configure-harbor
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+      passed:
+      - upload-and-stage-harbor
+      trigger: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: configuration
+    - get: variable
+  - task: configure-harbor
+    image: pcf-automation-image
+    # file: pcf-automation-tasks/tasks/configure-product.yml
+    # input_mapping:
+    #   config: configuration
+    #   env: configuration
+    #   vars: variable
+    # params:
+    #   CONFIG_FILE: ((foundation))/config/cf.yml
+    #   VARS_FILES: vars/((foundation))/vars/cf-vars.yml
+    #   ENV_FILE: ((foundation))/env/env.yml
+    config:
+      platform: linux
+      inputs:
+        - name: configuration
+        - name: variable
+      params:
+        CONFIG_FILE: ((foundation))/config/harbor-container-registry.yml
+        VARS_FILES: variable/((foundation))/vars/harbor-container-registry-vars.yml
+        ENV_FILE: ((foundation))/env/env.yml
+        CORE_DOMAIN: ((core_domain))
+      run:
+        path: bash
+        args:
+          - -c
+          - |
+            p-automator -v
+            set -eux
+
+            curl -L -o jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+            chmod +x jq
+
+            vars_files_args=("")
+            for vf in ${VARS_FILES}
+            do
+              vars_files_args+=("--vars-file ${vf}")
+            done
+            {
+              DOMAINS="*.$CORE_DOMAIN"
+              CERTIFICATE=`om --env configuration/"${ENV_FILE}" generate-certificate -d $DOMAINS`
+              
+              export OM_VAR_server_cert_pem=`echo $CERTIFICATE | ./jq ".certificate" -r`
+              export OM_VAR_server_private_key_pem=`echo $CERTIFICATE | ./jq ".key" -r`
+
+            } 2> /dev/null
+
+            # ${vars_files_args[@] needs to be globbed in order to pass through properly
+            # shellcheck disable=SC2068
+            om --env configuration/"${ENV_FILE}" configure-product --vars-env OM_VAR \
+              --config "configuration/${CONFIG_FILE}" ${vars_files_args[@]}
+
+- name: apply-product-changes
+  serial: true
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+      passed:
+      - configure-harbor
+      trigger: true
+    - get: pcf-automation-extension-tasks
+    - get: configuration
+  - task: apply-product-changes
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/apply-single-product-changes.yml
+    input_mapping:
+      env: configuration
+    params:
+      ENV_FILE: ((foundation))/env/env.yml
+      PRODUCT_NAME: harbor-container-registry
+
+- name: staged-harbor-config
+  plan:
+  - aggregate:
+    - get: pcf-automation-image
+      params:
+        unpack: true
+    - get: pcf-automation-tasks
+      params:
+        unpack: true
+    - get: configuration
+    - get: variable
+  - task: staged-config
+    image: pcf-automation-image
+    # file: pcf-automation-tasks/tasks/staged-config.yml
+    # input_mapping:
+    #   env: configuration
+    # params:
+    #   PRODUCT_NAME: cf
+    #   ENV_FILE: ((foundation))/env/env.yml
+    config:
+      platform: linux
+
+      inputs:
+      - name: configuration # contains the env file with target OpsMan Information
+
+      outputs:
+      - name: generated-config # will contain the staged product config
+
+      params:
+        PRODUCT_NAME: harbor-container-registry
+        ENV_FILE: ((foundation))/env/env.yml
+        SUBSTITUTE_CREDENTIALS_WITH_PLACEHOLDERS: true
+
+      run:
+        path: bash
+        args:
+        - "-c"
+        - |
+          p-automator -v
+          set -eux
+
+          flag=$(if "$SUBSTITUTE_CREDENTIALS_WITH_PLACEHOLDERS";
+                then echo '--include-placeholders';
+                else echo '--include-credentials';
+                fi
+                )
+
+          om --env configuration/"${ENV_FILE}" staged-config \
+            --product-name "$PRODUCT_NAME" \
+            "$flag" > generated-config/"$PRODUCT_NAME".yml
+  - put: pcf-automation-output-harbor-config # DODD: added this to get it to compile
+    params:
+      file: generated-config/harbor-container-registry.yml
+
