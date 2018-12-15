@@ -24,6 +24,14 @@ resources:
     secret_access_key: ((s3.secret_access_key))
     regexp: .*image-(.*).tgz
 
+- name: pks-product
+  type: pivnet
+  source:
+    api_token: ((pivnet_token))
+    product_slug: pivotal-container-service
+    product_version: ((pks_version))
+    sort_by: semver
+
 - name: stemcell
   type: pivnet
   source:
@@ -31,15 +39,6 @@ resources:
     product_slug: stemcells-ubuntu-xenial
     product_version: ((stemcell_version))
     sort_by: semver    
-
-# - name: pks-product
-#   type: s3
-#   source:
-#     access_key_id: ((s3.access_key_id))
-#     bucket: ((s3.buckets.product))
-#     regexp: pks-(.*).pivotal # Modified this to indicate small footprint
-#     region_name: ((s3.region_name))
-#     secret_access_key: ((s3.secret_access_key))
 
 - name: pcf-automation-output-pks-config
   type: s3
@@ -65,14 +64,6 @@ resources:
     private_key: ((variable.private_key))
     uri: ((variable.uri))
     branch: master
-
-- name: pks-product
-  type: pivnet
-  source:
-    api_token: ((pivnet_token))
-    product_slug: pivotal-container-service
-    product_version: ((pks_version))
-    sort_by: semver
 
 # triggers used to have jobs do something in a timely manner
 

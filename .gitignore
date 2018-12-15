@@ -1,3 +1,2 @@
-local-vars.yaml
 pivnet.yaml
-s3-params.yaml
+seed-credhub.sh

@@ -1,6 +1,4 @@
 s3:
-  access_key_id: REDACTED_PASSWORD
-  secret_access_key: REDACTED_PASSWORD
   region_name: us-east-2
   buckets: 
     pcf_automation: winterfell-live-platform-automation-for-pcf

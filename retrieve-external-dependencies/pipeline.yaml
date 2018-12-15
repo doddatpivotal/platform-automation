@@ -18,19 +18,19 @@ resources:
 - name: platform-automation-tasks-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.pcf_automation))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     regexp: tasks-(.*).zip
 
 - name: platform-automation-image-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.pcf_automation))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     regexp: image-(.*).tgz
 
 - name: pas-product
@@ -44,11 +44,11 @@ resources:
 - name: pas-product-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.product))
     regexp: srt-(.*).pivotal
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     sort_by: semver
 
 - name: healthwatch-product
@@ -62,11 +62,11 @@ resources:
 - name: healthwatch-product-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.product))
     regexp: p-healthwatch-(.*).pivotal
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
 
 - name: opsman-image
   type: pivnet
@@ -79,11 +79,11 @@ resources:
 - name: opsman-image-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.product))
     regexp: ((opsman_image_s3_versioned_regexp)) # vsphere ex: pcf-vsphere-(.*).ova
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
 
 - name: stemcell
   type: pivnet
@@ -96,11 +96,11 @@ resources:
 - name: stemcell-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.stemcell))
     regexp: ((stemcell_filename_regex))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
 
 - name: pks-product
   type: pivnet
@@ -113,11 +113,11 @@ resources:
 - name: pks-product-s3
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.product))
     regexp: pivotal-container-service-(.*).pivotal
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
 
 jobs:
 - name: get-platform-automation
