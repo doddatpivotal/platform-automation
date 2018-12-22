@@ -9,19 +9,19 @@ resources:
 - name: pcf-automation-tasks
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.pcf_automation))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     regexp: .*tasks-(.*).zip
 
 - name: pcf-automation-image
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.pcf_automation))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     regexp: .*image-(.*).tgz
 
 - name: pks-product
@@ -31,6 +31,12 @@ resources:
     product_slug: pivotal-container-service
     product_version: ((pks_version))
     sort_by: semver
+
+- name: pcf-automation-extension-tasks
+  type: git
+  source:
+    uri: ((extension-tasks.uri))
+    branch: master
 
 - name: stemcell
   type: pivnet
@@ -43,10 +49,10 @@ resources:
 - name: pcf-automation-output-pks-config
   type: s3
   source:
-    access_key_id: ((s3.access_key_id))
+    access_key_id: ((s3_access_key_id))
     bucket: ((s3.buckets.pcf_automation_output))
     region_name: ((s3.region_name))
-    secret_access_key: ((s3.secret_access_key))
+    secret_access_key: ((s3_secret_access_key))
     versioned_file: pivotal-container-service.yml
 
 # configurations
@@ -54,15 +60,8 @@ resources:
 - name: configuration
   type: git
   source:
-    private_key: ((configuration.private_key))
+    private_key: ((configuration_git_repo.private_key))
     uri: ((configuration.uri))
-    branch: master
-
-- name: variable
-  type: git
-  source:
-    private_key: ((variable.private_key))
-    uri: ((variable.uri))
     branch: master
 
 # triggers used to have jobs do something in a timely manner
@@ -88,23 +87,42 @@ jobs:
       trigger: true
     - get: pks-product
     - get: configuration
-    - get: variable
+    - get: pcf-automation-extension-tasks
+  - task: copy-files-to-interpolate-to-root-dir
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/copy-path-files-to-dir-root.yml
+    input_mapping:
+      files: configuration
+    params:
+      PATH_TO_COPY_TO_ROOT: ((foundation))/vars
+  - task: credhub-interpolate
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/credhub-interpolate.yml
+    input_mapping:
+      files: root-pathed-files
+    params:
+      # all required
+      CREDHUB_CA_CERT: ((credhub_ca_cert.certificate))
+      CREDHUB_CLIENT: concourse_to_credhub
+      CREDHUB_SECRET: ((concourse_to_credhub_secret))
+      CREDHUB_SERVER: ((credhub_server))
+      PREFIX: /lab-foundation
   - task: upload-product
     image: pcf-automation-image
     file: pcf-automation-tasks/tasks/upload-product.yml
     input_mapping:
       product: pks-product
-      env: configuration
+      env: interpolated-files
     params:
-      ENV_FILE: ((foundation))/env/env.yml
+      ENV_FILE: env.yml
   - task: stage-product
     image: pcf-automation-image
     file: pcf-automation-tasks/tasks/stage-product.yml
     input_mapping:
       product: pks-product
-      env: configuration
+      env: interpolated-files
     params:
-      ENV_FILE: ((foundation))/env/env.yml
+      ENV_FILE: env.yml
 
 - name: upload-stemcell
   serial: true
@@ -125,14 +143,33 @@ jobs:
         globs:
         - bosh-stemcell-*vsphere-*
     - get: configuration
-    - get: variable
+    - get: pcf-automation-extension-tasks
+  - task: copy-files-to-interpolate-to-root-dir
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/copy-path-files-to-dir-root.yml
+    input_mapping:
+      files: configuration
+    params:
+      PATH_TO_COPY_TO_ROOT: ((foundation))/vars
+  - task: credhub-interpolate
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/credhub-interpolate.yml
+    input_mapping:
+      files: root-pathed-files
+    params:
+      # all required
+      CREDHUB_CA_CERT: ((credhub_ca_cert.certificate))
+      CREDHUB_CLIENT: concourse_to_credhub
+      CREDHUB_SECRET: ((concourse_to_credhub_secret))
+      CREDHUB_SERVER: ((credhub_server))
+      PREFIX: /lab-foundation
   - task: upload-stemcell
     image: pcf-automation-image
     file: pcf-automation-tasks/tasks/upload-stemcell.yml
     input_mapping:
-      env: configuration
+      env: interpolated-files
     params:
-      ENV_FILE: ((foundation))/env/env.yml
+      ENV_FILE: env.yml
 
 - name: configure-pks
   serial: true
@@ -148,27 +185,37 @@ jobs:
       params:
         unpack: true
     - get: configuration
-    - get: variable
+    - get: pcf-automation-extension-tasks
+  - task: copy-files-to-interpolate-to-root-dir
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/copy-path-files-to-dir-root.yml
+    input_mapping:
+      files: configuration
+    params:
+      PATH_TO_COPY_TO_ROOT: ((foundation))/vars
+  - task: credhub-interpolate
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/credhub-interpolate.yml
+    input_mapping:
+      files: root-pathed-files
+    params:
+      # all required
+      CREDHUB_CA_CERT: ((credhub_ca_cert.certificate))
+      CREDHUB_CLIENT: concourse_to_credhub
+      CREDHUB_SECRET: ((concourse_to_credhub_secret))
+      CREDHUB_SERVER: ((credhub_server))
+      PREFIX: /lab-foundation
   - task: configure-pks
     image: pcf-automation-image
-    # file: pcf-automation-tasks/tasks/configure-product.yml
-    # input_mapping:
-    #   config: configuration
-    #   env: configuration
-    #   vars: variable
-    # params:
-    #   CONFIG_FILE: ((foundation))/config/cf.yml
-    #   VARS_FILES: vars/((foundation))/vars/cf-vars.yml
-    #   ENV_FILE: ((foundation))/env/env.yml
     config:
       platform: linux
       inputs:
         - name: configuration
-        - name: variable
+        - name: interpolated-files
       params:
         CONFIG_FILE: ((foundation))/config/pivotal-container-service.yml
-        VARS_FILES: variable/((foundation))/vars/pivotal-container-service-vars.yml
-        ENV_FILE: ((foundation))/env/env.yml
+        VARS_FILES: interpolated-files/pivotal-container-service-vars.yml
+        ENV_FILE: interpolated-files/env.yml
         CORE_DOMAIN: ((core_domain))
       run:
         path: bash
@@ -188,7 +235,7 @@ jobs:
             done
             {
               DOMAINS="*.pks.$CORE_DOMAIN,*.api.pks.$CORE_DOMAIN"
-              CERTIFICATE=`om --env configuration/"${ENV_FILE}" generate-certificate -d $DOMAINS`
+              CERTIFICATE=`om --env "${ENV_FILE}" generate-certificate -d $DOMAINS`
               
               export OM_VAR_pivotal_container_service_pks_tls_cert_pem=`echo $CERTIFICATE | ./jq ".certificate" -r`
               export OM_VAR_pivotal_container_service_pks_tls_private_key_pem=`echo $CERTIFICATE | ./jq ".key" -r`
@@ -197,7 +244,7 @@ jobs:
 
             # ${vars_files_args[@] needs to be globbed in order to pass through properly
             # shellcheck disable=SC2068
-            om --env configuration/"${ENV_FILE}" configure-product --vars-env OM_VAR \
+            om --env "${ENV_FILE}" configure-product --vars-env OM_VAR \
               --config "configuration/${CONFIG_FILE}" ${vars_files_args[@]}
 
 - name: apply-product-changes
@@ -214,7 +261,26 @@ jobs:
       params:
         unpack: true
     - get: configuration
-    - get: variable
+    - get: pcf-automation-extension-tasks
+  - task: copy-files-to-interpolate-to-root-dir
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/copy-path-files-to-dir-root.yml
+    input_mapping:
+      files: configuration
+    params:
+      PATH_TO_COPY_TO_ROOT: ((foundation))/vars
+  - task: credhub-interpolate
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/credhub-interpolate.yml
+    input_mapping:
+      files: root-pathed-files
+    params:
+      # all required
+      CREDHUB_CA_CERT: ((credhub_ca_cert.certificate))
+      CREDHUB_CLIENT: concourse_to_credhub
+      CREDHUB_SECRET: ((concourse_to_credhub_secret))
+      CREDHUB_SERVER: ((credhub_server))
+      PREFIX: /lab-foundation
   - task: apply-product-changes
     image: pcf-automation-image
     config: 
@@ -222,10 +288,11 @@ jobs:
 
       inputs:
       - name: configuration # contains the env file with target OpsMan Information
+      - name: interpolated-files
 
       params:
         PRODUCT_NAME: pivotal-container-service
-        ENV_FILE: ((foundation))/env/env.yml
+        ENV_FILE: interpolated-files/env.yml
 
       run:
         path: bash
@@ -234,7 +301,7 @@ jobs:
         - |
           p-automator -v
           set -eux
-          om --env configuration/"${ENV_FILE}" apply-changes -n ${PRODUCT_NAME}
+          om --env "${ENV_FILE}" apply-changes -n ${PRODUCT_NAME}
 
 - name: staged-pks-config
   plan:
@@ -246,27 +313,41 @@ jobs:
       params:
         unpack: true
     - get: configuration
-    - get: variable
+    - get: pcf-automation-extension-tasks
+  - task: copy-files-to-interpolate-to-root-dir
+    image: pcf-automation-image
+    file: pcf-automation-extension-tasks/tasks/copy-path-files-to-dir-root.yml
+    input_mapping:
+      files: configuration
+    params:
+      PATH_TO_COPY_TO_ROOT: ((foundation))/vars
+  - task: credhub-interpolate
+    image: pcf-automation-image
+    file: pcf-automation-tasks/tasks/credhub-interpolate.yml
+    input_mapping:
+      files: root-pathed-files
+    params:
+      # all required
+      CREDHUB_CA_CERT: ((credhub_ca_cert.certificate))
+      CREDHUB_CLIENT: concourse_to_credhub
+      CREDHUB_SECRET: ((concourse_to_credhub_secret))
+      CREDHUB_SERVER: ((credhub_server))
+      PREFIX: /lab-foundation
   - task: staged-config
     image: pcf-automation-image
-    # file: pcf-automation-tasks/tasks/staged-config.yml
-    # input_mapping:
-    #   env: configuration
-    # params:
-    #   PRODUCT_NAME: cf
-    #   ENV_FILE: ((foundation))/env/env.yml
     config:
       platform: linux
 
       inputs:
       - name: configuration # contains the env file with target OpsMan Information
+      - name: interpolated-files
 
       outputs:
       - name: generated-config # will contain the staged product config
 
       params:
         PRODUCT_NAME: pivotal-container-service
-        ENV_FILE: ((foundation))/env/env.yml
+        ENV_FILE: env.yml
         SUBSTITUTE_CREDENTIALS_WITH_PLACEHOLDERS: true
 
       run:
@@ -283,7 +364,7 @@ jobs:
                 fi
                 )
 
-          om --env configuration/"${ENV_FILE}" staged-config \
+          om --env interpolated-files/"${ENV_FILE}" staged-config \
             --product-name "$PRODUCT_NAME" \
             "$flag" > generated-config/"$PRODUCT_NAME".yml
   - put: pcf-automation-output-pks-config # DODD: added this to get it to compile

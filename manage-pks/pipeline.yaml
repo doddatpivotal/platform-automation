@@ -1,0 +1,78 @@
+# groups:
+# - name: Install-PKS
+#   jobs:
+#   - upload-product
+#   - stage-product
+#   - update-director-config
+#   - configure-product
+#   - deploy-product
+#   - create-pks-cli-user
+# - name: Delete-PKS-Clusters
+#   jobs:
+#   - delete-clusters
+#   - delete-product
+
+resources:
+- name: pcf-pipelines-utils
+  type: git
+  source:
+    uri: https://github.com/pivotalservices/concourse-pipeline-samples.git
+
+- name: pcf-pipelines-utils-fork
+  type: git
+  source:
+    uri: https://github.com/doddatpivotal/concourse-pipeline-samples.git
+
+jobs:
+
+- name: create-pks-admin-user
+  plan:
+  - aggregate:
+    - get: pcf-pipelines-utils
+  - task: create-pks-admin-user
+    file: pcf-pipelines-utils/tasks/pcf/pks/configure-pks-cli-user/task.yml
+    input_mapping:
+      files: pcf-pipelines-utils
+    params:
+      OPSMAN_DOMAIN_OR_IP_ADDRESS: ((opsmgr-domain))
+      OPSMAN_USERNAME: ((opsmgr-username))
+      OPSMAN_PASSWORD: ((general_password))
+      OPSMAN_CLIENT_ID: ""
+      OPSMAN_CLIENT_SECRET: ""
+      PKS_API_DOMAIN: ((pks-api-domain))
+      PKS_CLI_USERNAME: ((pks-cli-user-username))
+      PKS_CLI_USEREMAIL: ((pks-cli-user-email))
+      PKS_CLI_PASSWORD: ((general_password))
+
+
+
+- name: create-cluster
+  plan:
+  - aggregate:
+    - get: pcf-pipelines-utils
+  - task: create-cluster
+    file: pcf-pipelines-utils/tasks/pcf/pks/create-pks-cluster/task.yml
+    input_mapping:
+      pcf-pipelines-utils: pcf-pipelines-utils
+    params:
+      PCF_PKS_API: ((pks-api-domain))
+      PKS_CLI_USERNAME: ((pks-cli-user-username))
+      PKS_CLI_PASSWORD: ((general_password))
+      PKS_SERVICE_PLAN_NAME: ((pks-service-plan-name))
+      PKS_CLUSTER_NAME: ((pks-cluster-name))
+      PKS_CLUSTER_MASTER_HOSTNAME: ((pks-cluster-master-hostname))
+      PKS_CLUSTER_NUMBER_OF_WORKERS: ((pks-cluster-number-of-workers))
+
+- name: delete-cluster
+  plan:
+  - aggregate:
+    - get: pcf-pipelines-utils-fork
+  - task: delete-cluster
+    file: pcf-pipelines-utils-fork/tasks/pcf/pks/delete-pks-cluster/task.yml
+    input_mapping:
+      pcf-pipelines-utils: pcf-pipelines-utils-fork
+    params:
+      PCF_PKS_API: ((pks-api-domain))
+      PKS_CLI_USERNAME: ((pks-cli-user-username))
+      PKS_CLI_PASSWORD: ((general_password))
+      PKS_CLUSTER_NAME: ((pks-cluster-name))

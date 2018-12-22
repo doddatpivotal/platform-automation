@@ -1,0 +1,9 @@
+opsmgr-username: admin
+opsmgr-domain: opsmgr.lab.winterfell.live
+pks-api-domain: api.pks.lab.winterfell.live
+pks-cli-user-username: pksadmin
+pks-cli-user-email: pksadmin@winterfell.live
+pks-service-plan-name: very-small-priv
+pks-cluster-name: cluster1.pks.lab.winterfell.live
+pks-cluster-master-hostname: cluster1.pks.lab.winterfell.live
+pks-cluster-number-of-workers: 2

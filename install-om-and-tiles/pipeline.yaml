@@ -445,15 +445,6 @@ jobs:
       INTERPOLATE_PATH: ((foundation))/vars
   - task: configure-pas
     image: pcf-automation-image
-    # file: pcf-automation-tasks/tasks/configure-product.yml
-    # input_mapping:
-    #   config: configuration
-    #   env: configuration
-    #   vars: variable
-    # params:
-    #   CONFIG_FILE: ((foundation))/config/cf.yml
-    #   VARS_FILES: vars/((foundation))/vars/cf-vars.yml
-    #   ENV_FILE: ((foundation))/env/env.yml
     config:
       platform: linux
       inputs:
